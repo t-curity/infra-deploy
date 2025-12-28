@@ -2,7 +2,7 @@
 # ============================================================
 # T-curity Manual Deploy Script
 # ============================================================
-# Usage: ./deploy.sh [all|backend|ai|sdk|demo|redis]
+# Usage: ./deploy.sh [all|backend|ai|sdk|demo]
 # ============================================================
 set -e
 
@@ -23,16 +23,6 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 log() { echo -e "${GREEN}[DEPLOY]${NC} $1"; }
 
-deploy_redis() {
-    log "Deploying Redis..."
-    ssh ${SSH_USER}@${MAIN_HOST} << 'EOF'
-docker stop tcurity-redis 2>/dev/null || true
-docker rm tcurity-redis 2>/dev/null || true
-docker run -d --name tcurity-redis --restart unless-stopped \
-    -p 6379:6379 redis:7-alpine redis-server --appendonly yes
-EOF
-}
-
 deploy_backend() {
     log "Deploying Backend..."
     ssh ${SSH_USER}@${MAIN_HOST} << EOF
@@ -42,7 +32,6 @@ docker rm tcurity-backend 2>/dev/null || true
 docker run -d --name tcurity-backend --restart unless-stopped \
     -p 8000:8000 \
     -e AI_SERVER_URL=http://${GPU_PRIVATE}:9000 \
-    -e REDIS_URL=redis://localhost:6379 \
     ${REGISTRY}/${ORG}/backend:develop
 docker image prune -f
 EOF
@@ -74,7 +63,7 @@ docker pull ${REGISTRY}/${ORG}/sdk:dev
 docker stop tcurity-sdk 2>/dev/null || true
 docker rm tcurity-sdk 2>/dev/null || true
 docker run -d --name tcurity-sdk --restart unless-stopped \
-    -p 8081:80 ${REGISTRY}/${ORG}/sdk:dev
+    -p 3000:3000 ${REGISTRY}/${ORG}/sdk:dev
 docker image prune -f
 EOF
 }
@@ -86,19 +75,18 @@ docker pull ${REGISTRY}/${ORG}/demo:dev
 docker stop tcurity-demo 2>/dev/null || true
 docker rm tcurity-demo 2>/dev/null || true
 docker run -d --name tcurity-demo --restart unless-stopped \
-    -p 8080:80 ${REGISTRY}/${ORG}/demo:dev
+    -p 5173:5173 ${REGISTRY}/${ORG}/demo:dev
 docker image prune -f
 EOF
 }
 
 case ${1:-all} in
-    redis)   deploy_redis ;;
     backend) deploy_backend ;;
     ai)      deploy_ai ;;
     sdk)     deploy_sdk ;;
     demo)    deploy_demo ;;
-    all)     deploy_redis; deploy_backend; deploy_ai; deploy_sdk; deploy_demo ;;
-    *)       echo "Usage: $0 {all|backend|ai|sdk|demo|redis}"; exit 1 ;;
+    all)     deploy_backend; deploy_ai; deploy_sdk; deploy_demo ;;
+    *)       echo "Usage: $0 {all|backend|ai|sdk|demo}"; exit 1 ;;
 esac
 
 echo "✅ Done!"

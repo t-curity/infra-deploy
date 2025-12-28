@@ -31,7 +31,7 @@ ssh -o ConnectTimeout=5 ${SSH_USER}@${GPU_HOST} \
     "docker ps --format 'table {{.Names}}\t{{.Status}}' | grep tcurity; echo ''; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader" 2>/dev/null || echo "Connection failed"
 
 echo -e "\n${YELLOW}[Health Checks]${NC}"
-for svc in "Backend:${MAIN_HOST}:8000/health" "AI:${GPU_HOST}:9000/health" "Demo:${MAIN_HOST}:8080" "SDK:${MAIN_HOST}:8081"; do
+for svc in "Backend:${MAIN_HOST}:8000/health" "AI:${GPU_HOST}:9000/health" "Demo:${MAIN_HOST}:5173" "SDK:${MAIN_HOST}:3000"; do
     name="${svc%%:*}"
     url="http://${svc#*:}"
     if curl -sf "$url" > /dev/null 2>&1; then

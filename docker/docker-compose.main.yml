@@ -5,21 +5,6 @@
 # ============================================================
 
 services:
-  redis:
-    image: redis:7-alpine
-    container_name: tcurity-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     image: ghcr.io/t-curity/backend:develop
     container_name: tcurity-backend
@@ -27,29 +12,22 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # AWS 테스트: 10.0.83.190 / 카카오: 10.0.83.48
+      # GPU 서버 Private IP (AWS: 10.0.83.190 / 카카오: 10.0.83.48)
       - AI_SERVER_URL=http://10.0.83.190:9000
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
 
   sdk:
     image: ghcr.io/t-curity/sdk:dev
     container_name: tcurity-sdk
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "3000:3000"
 
   demo:
     image: ghcr.io/t-curity/demo:dev
     container_name: tcurity-demo
     restart: unless-stopped
     ports:
-      - "8080:80"
-
-volumes:
-  redis_data:
+      - "5173:5173"
 
 networks:
   default:

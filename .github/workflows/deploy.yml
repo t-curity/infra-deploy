@@ -101,7 +101,6 @@ jobs:
               --restart unless-stopped \
               -p 8000:8000 \
               -e AI_SERVER_URL=http://${{ needs.setup.outputs.gpu_private }}:9000 \
-              -e REDIS_URL=redis://localhost:6379 \
               ${{ env.REGISTRY }}/${{ env.ORG }}/backend:develop
             
             docker image prune -f
@@ -170,7 +169,7 @@ jobs:
             docker run -d \
               --name tcurity-sdk \
               --restart unless-stopped \
-              -p 8081:80 \
+              -p 3000:3000 \
               ${{ env.REGISTRY }}/${{ env.ORG }}/sdk:dev
             
             docker image prune -f
@@ -201,7 +200,7 @@ jobs:
             docker run -d \
               --name tcurity-demo \
               --restart unless-stopped \
-              -p 8080:80 \
+              -p 5173:5173 \
               ${{ env.REGISTRY }}/${{ env.ORG }}/demo:dev
             
             docker image prune -f
