@@ -117,10 +117,13 @@ jobs:
     steps:
       - name: Deploy AI Server
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_ENV: ${{ github.event.inputs.environment || 'aws-test' }}
         with:
           host: ${{ needs.setup.outputs.gpu_host }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_ENV
           script: |
             set -e
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -129,10 +132,17 @@ jobs:
             docker stop tcurity-ai 2>/dev/null || true
             docker rm tcurity-ai 2>/dev/null || true
             
+            # GPU 옵션: 카카오는 GPU 사용, AWS는 CPU만
+            if [ "$DEPLOY_ENV" = "kakao-prod" ]; then
+              GPU_OPT="--gpus all"
+            else
+              GPU_OPT=""
+            fi
+            
             docker run -d \
               --name tcurity-ai \
               --restart unless-stopped \
-              --gpus all \
+              $GPU_OPT \
               -p 9000:9000 \
               -v /home/ubuntu/tcurity-ai/models:/app/models:ro \
               -v /home/ubuntu/tcurity-ai/data:/app/data:ro \
