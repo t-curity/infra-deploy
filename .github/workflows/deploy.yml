@@ -18,11 +18,11 @@ on:
       environment:
         description: 'Target environment'
         required: true
-        default: 'kakao-prod'
+        default: 'aws-test'
         type: choice
         options:
-          - kakao-prod
           - aws-test
+          - kakao-prod
 
   repository_dispatch:
     types: [deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-all]
@@ -46,18 +46,18 @@ jobs:
       - name: Set environment
         id: env
         run: |
-          ENV="${{ github.event.inputs.environment || 'kakao-prod' }}"
+          ENV="${{ github.event.inputs.environment || 'aws-test' }}"
           
-          if [ "$ENV" = "aws-test" ]; then
-            # AWS 테스트
-            echo "main_host=43.201.104.130" >> $GITHUB_OUTPUT
-            echo "gpu_host=43.203.216.206" >> $GITHUB_OUTPUT
-            echo "gpu_private=10.0.83.190" >> $GITHUB_OUTPUT
-          else
-            # 카카오 클라우드 프로덕션 (기본값)
+          if [ "$ENV" = "kakao-prod" ]; then
+            # 카카오 클라우드 프로덕션
             echo "main_host=61.109.236.16" >> $GITHUB_OUTPUT
             echo "gpu_host=61.109.238.4" >> $GITHUB_OUTPUT
             echo "gpu_private=10.0.83.48" >> $GITHUB_OUTPUT
+          else
+            # AWS 테스트 (기본값)
+            echo "main_host=43.201.104.130" >> $GITHUB_OUTPUT
+            echo "gpu_host=43.203.216.206" >> $GITHUB_OUTPUT
+            echo "gpu_private=10.0.83.190" >> $GITHUB_OUTPUT
           fi
           
       - name: Set service
@@ -239,17 +239,24 @@ jobs:
                     proxy_set_header X-Real-IP $remote_addr;
                 }
 
+                location = /sdk.js {
+                    proxy_pass http://127.0.0.1:3000/sdk.js;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                }
+
+                location /ticket-site-demo/ {
+                    rewrite ^/ticket-site-demo/(.*)$ /$1 break;
+                    proxy_pass http://127.0.0.1:5173;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                }
+
                 location / {
                     proxy_pass http://127.0.0.1:5173;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "upgrade";
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                }
-
-                location = /sdk.js {
-                    proxy_pass http://127.0.0.1:3000/sdk.js;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                 }
@@ -296,6 +303,6 @@ jobs:
           echo "| Demo | ${{ needs.deploy-demo.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Nginx | ${{ needs.deploy-nginx.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** ${{ github.event.inputs.environment || 'kakao-prod' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment || 'aws-test' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Main Server:** ${{ needs.setup.outputs.main_host }}" >> $GITHUB_STEP_SUMMARY
           echo "**GPU Server:** ${{ needs.setup.outputs.gpu_host }}" >> $GITHUB_STEP_SUMMARY
