@@ -39,8 +39,8 @@ sudo ufw allow 22/tcp
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 sudo ufw allow 8000/tcp
-sudo ufw allow 8080/tcp
-sudo ufw allow 8081/tcp
+sudo ufw allow 5173/tcp
+sudo ufw allow 3000/tcp
 sudo ufw --force enable
 
 # GHCR 로그인
@@ -60,5 +60,5 @@ echo "=========================================="
 echo "Public IP: $(curl -s ifconfig.me)"
 echo "Private IP: $(hostname -I | awk '{print $1}')"
 echo ""
-echo "Ports: 8000(Backend), 8080(Demo), 8081(SDK), 6379(Redis)"
+echo "Ports: 8000(Backend), 5173(Demo), 3000(SDK)"
 echo "=========================================="
