@@ -144,14 +144,14 @@ jobs:
               --restart unless-stopped \
               $GPU_OPT \
               -p 9000:9000 \
-              -v /home/ubuntu/tcurity-ai/models:/app/models:ro \
-              -v /home/ubuntu/tcurity-ai/data:/app/data:ro \
-              -e MODEL_DIR=/app/models/phase_a \
+              -v /home/ubuntu/tcurity-ai/models:/models:ro \
+              -v /home/ubuntu/tcurity-ai/data:/data:ro \
+              -e MODEL_DIR=/models/phase_a \
               -e PROJECT_ROOT=/app \
               -e MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking \
-              -e IMAGE_DATA_ROOT=/app/data/images \
-              -e MODEL_OUTPUT_ROOT=/app/models \
-              -e PHASE_B_PROBLEM_IMAGE_ROOT=/app/data/processed_images \
+              -e IMAGE_DATA_ROOT=/data/images \
+              -e MODEL_OUTPUT_ROOT=/models \
+              -e PHASE_B_PROBLEM_IMAGE_ROOT=/data/processed_images \
               ${{ env.REGISTRY }}/${{ env.ORG }}/ai:develop
             
             docker image prune -f
