@@ -146,6 +146,8 @@ jobs:
               -p 9000:9000 \
               -v /home/ubuntu/tcurity-ai/models:/app/models:ro \
               -v /home/ubuntu/tcurity-ai/data:/app/data:ro \
+              -e MODEL_DIR=/app/models/phase_a \
+              -e PROJECT_ROOT=/app \
               -e MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking \
               -e IMAGE_DATA_ROOT=/app/data/images \
               -e MODEL_OUTPUT_ROOT=/app/models \
