@@ -1,0 +1,32 @@
+# ============================================================
+# T-curity GPU Server - Docker Compose
+# ============================================================
+# 사용법: docker compose -f docker-compose.gpu.yml up -d
+# ============================================================
+
+services:
+  ai:
+    image: ghcr.io/t-curity/ai:develop
+    container_name: tcurity-ai
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking
+      - IMAGE_DATA_ROOT=/app/data/images
+      - MODEL_OUTPUT_ROOT=/app/models
+      - PHASE_B_PROBLEM_IMAGE_ROOT=/app/data/processed_images
+    volumes:
+      - /home/ubuntu/tcurity-ai/models:/app/models:ro
+      - /home/ubuntu/tcurity-ai/data:/app/data:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  default:
+    name: tcurity-ai-network

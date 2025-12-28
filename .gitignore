@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Secrets
+*.pem
+*.key
+.env.local
+.env.production
+
+# Logs
+*.log
+logs/
+
+# Temp
+tmp/
