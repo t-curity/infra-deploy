@@ -32,6 +32,15 @@ infra-deploy/
 | Backend | 8000 | REST API (FastAPI) |
 | AI Server | 9000 | AI 추론 서버 (GPU) |
 
+## 🌐 URL 라우팅 (Nginx)
+
+| URL 패턴 | 대상 서비스 |
+|----------|-------------|
+| `/` | Demo Site |
+| `/ticket-site-demo/*` | Demo Site |
+| `/api/*` | Backend API |
+| `/sdk.js` | Captcha SDK |
+
 ## 🔧 서버 정보 (카카오 클라우드)
 
 | 서버 | Public IP | Private IP |
