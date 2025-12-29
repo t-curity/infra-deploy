@@ -55,8 +55,8 @@ jobs:
             echo "gpu_private=10.0.83.48" >> $GITHUB_OUTPUT
           else
             # AWS 테스트 (기본값)
-            echo "main_host=3.36.60.13" >> $GITHUB_OUTPUT
-            echo "gpu_host=54.180.253.215" >> $GITHUB_OUTPUT
+            echo "main_host=43.201.104.130" >> $GITHUB_OUTPUT
+            echo "gpu_host=43.203.216.206" >> $GITHUB_OUTPUT
             echo "gpu_private=10.0.83.190" >> $GITHUB_OUTPUT
           fi
           
@@ -144,15 +144,15 @@ jobs:
               --restart unless-stopped \
               $GPU_OPT \
               -p 9000:9000 \
-              -v /home/ubuntu/tcurity-ai/models:/models:ro \
-              -v /home/ubuntu/tcurity-ai/data:/data:ro \
-              -e MODEL_A_DIR=/models/phase_a \
-              -e MODEL_B_DIR=/models/phase_b \
+              -v /home/ubuntu/tcurity-ai/models:/app/models:ro \
+              -v /home/ubuntu/tcurity-ai/data:/app/data:ro \
+              -e MODEL_DIR=/app/models/phase_a \
+              -e MODEL_DIR_B=/app/models/phase_b \
               -e PROJECT_ROOT=/app \
               -e MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking \
-              -e IMAGE_DATA_ROOT=/data/images \
-              -e MODEL_OUTPUT_ROOT=/models \
-              -e PHASE_B_PROBLEM_IMAGE_ROOT=/data/processed_images \
+              -e IMAGE_DATA_ROOT=/app/data/images \
+              -e MODEL_OUTPUT_ROOT=/app/models \
+              -e PHASE_B_PROBLEM_IMAGE_ROOT=/app/data/processed_images \
               ${{ env.REGISTRY }}/${{ env.ORG }}/ai:develop
             
             docker image prune -f
@@ -242,45 +242,47 @@ jobs:
             
             # Nginx 설정 파일 생성
             cat > ~/nginx/default.conf << 'NGINXCONF'
-            server {
-                listen 80;
-                server_name _;
+server {
+    listen 80;
+    server_name _;
 
-                location /api/ {
-                    proxy_pass http://127.0.0.1:8000;
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 
-                location = /sdk.js {
-                    proxy_pass http://127.0.0.1:3000/sdk.js;
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                }
+    location = /sdk.js {
+        proxy_pass http://127.0.0.1:3000/sdk.js;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 
-                location /ticket-site-demo/ {
-                    rewrite ^/ticket-site-demo/(.*)$ /$1 break;
-                    proxy_pass http://127.0.0.1:5173;
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                }
+    location /ticket-site-demo/ {
+        rewrite ^/ticket-site-demo/(.*)$ /$1 break;
+        proxy_pass http://127.0.0.1:5173;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_intercept_errors on;
+        error_page 404 = /index.html;
+    }
 
-                location / {
-                    proxy_pass http://127.0.0.1:5173;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection "upgrade";
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                }
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 
-                location /health {
-                    access_log off;
-                    return 200 'OK';
-                    add_header Content-Type text/plain;
-                }
-            }
-            NGINXCONF
+    location /health {
+        access_log off;
+        return 200 'OK';
+        add_header Content-Type text/plain;
+    }
+}
+NGINXCONF
             
             # 기존 컨테이너 제거
             docker stop tcurity-nginx 2>/dev/null || true
