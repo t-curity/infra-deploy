@@ -13,7 +13,7 @@ services:
       - "8000:8000"
     environment:
       # GPU 서버 Private IP (AWS: 10.0.83.190 / 카카오: 10.0.83.48)
-      - AI_SERVER_URL=http://10.0.83.190:9000
+      - AI_SERVER_URL=http://10.0.83.48:9000
 
   sdk:
     image: ghcr.io/t-curity/sdk:dev
