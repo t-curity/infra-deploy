@@ -46,7 +46,7 @@ jobs:
       - name: Set environment
         id: env
         run: |
-          ENV="${{ github.event.inputs.environment || 'aws-test' }}"
+          ENV="${{ github.event.inputs.environment || 'kakao-prod' }}"
           
           if [ "$ENV" = "kakao-prod" ]; then
             # 카카오 클라우드 프로덕션
