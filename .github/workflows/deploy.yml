@@ -1,9 +1,234 @@
-deploy-nginx:
+name: Deploy Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - backend
+          - ai
+          - sdk
+          - demo
+          - nginx
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'kakao-prod'
+        type: choice
+        options:
+          - aws-test
+          - kakao-prod
+
+  repository_dispatch:
+    types: [deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-all]
+
+env:
+  REGISTRY: ghcr.io
+  ORG: t-curity
+
+jobs:
+  # ============================================================
+  # 환경 설정
+  # ============================================================
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      main_host: ${{ steps.env.outputs.main_host }}
+      gpu_host: ${{ steps.env.outputs.gpu_host }}
+      gpu_private: ${{ steps.env.outputs.gpu_private }}
+      service: ${{ steps.svc.outputs.service }}
+    steps:
+      - name: Set environment
+        id: env
+        run: |
+          ENV="${{ github.event.inputs.environment || 'kakao-prod' }}"
+          
+          if [ "$ENV" = "kakao-prod" ]; then
+            # 카카오 클라우드 프로덕션
+            echo "main_host=61.109.236.16" >> $GITHUB_OUTPUT
+            echo "gpu_host=61.109.238.4" >> $GITHUB_OUTPUT
+            echo "gpu_private=10.0.83.48" >> $GITHUB_OUTPUT
+          else
+            # AWS 테스트 (기본값)
+            echo "main_host=43.201.104.130" >> $GITHUB_OUTPUT
+            echo "gpu_host=43.203.216.206" >> $GITHUB_OUTPUT
+            echo "gpu_private=10.0.83.190" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Set service
+        id: svc
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            case "${{ github.event.action }}" in
+              deploy-backend) echo "service=backend" >> $GITHUB_OUTPUT ;;
+              deploy-ai) echo "service=ai" >> $GITHUB_OUTPUT ;;
+              deploy-sdk) echo "service=sdk" >> $GITHUB_OUTPUT ;;
+              deploy-demo) echo "service=demo" >> $GITHUB_OUTPUT ;;
+              *) echo "service=all" >> $GITHUB_OUTPUT ;;
+            esac
+          else
+            echo "service=${{ github.event.inputs.service || 'all' }}" >> $GITHUB_OUTPUT
+          fi
+
+  # ============================================================
+  # Backend 배포 (Main Server)
+  # ============================================================
+  deploy-backend:
+    needs: setup
+    if: needs.setup.outputs.service == 'all' || needs.setup.outputs.service == 'backend'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ needs.setup.outputs.main_host }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/backend:develop
+            docker stop tcurity-backend 2>/dev/null || true
+            docker rm tcurity-backend 2>/dev/null || true
+            
+            docker run -d \
+              --name tcurity-backend \
+              --restart unless-stopped \
+              -p 8000:8000 \
+              -e AI_SERVER_URL=http://${{ needs.setup.outputs.gpu_private }}:9000 \
+              ${{ env.REGISTRY }}/${{ env.ORG }}/backend:develop
+            
+            docker image prune -f
+            echo "✅ Backend deployed"
+
+  # ============================================================
+  # AI Server 배포 (GPU Server)
+  # ============================================================
+  deploy-ai:
+    needs: setup
+    if: needs.setup.outputs.service == 'all' || needs.setup.outputs.service == 'ai'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy AI Server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_ENV: ${{ github.event.inputs.environment || 'aws-test' }}
+        with:
+          host: ${{ needs.setup.outputs.gpu_host }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_ENV
+          script: |
+            set -e
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/ai:develop
+            docker stop tcurity-ai 2>/dev/null || true
+            docker rm tcurity-ai 2>/dev/null || true
+            
+            # GPU 옵션: 카카오는 GPU 사용, AWS는 CPU만
+            if [ "$DEPLOY_ENV" = "kakao-prod" ]; then
+              GPU_OPT="--gpus all"
+            else
+              GPU_OPT=""
+            fi
+            
+            docker run -d \
+              --name tcurity-ai \
+              --restart unless-stopped \
+              $GPU_OPT \
+              -p 9000:9000 \
+              -v /home/ubuntu/tcurity-ai/models:/models:ro \
+              -v /home/ubuntu/tcurity-ai/data:/data:ro \
+              -e MODEL_A_DIR=/models/phase_a \
+              -e MODEL_B_DIR=/models/phase_b \
+              -e PROJECT_ROOT=/app \
+              -e MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking \
+              -e IMAGE_DATA_ROOT=/data/images \
+              -e MODEL_OUTPUT_ROOT=/app/models \
+              -e PHASE_B_PROBLEM_IMAGE_ROOT=/data/processed_images \
+              ${{ env.REGISTRY }}/${{ env.ORG }}/ai:develop
+            
+            docker image prune -f
+            echo "✅ AI Server deployed"
+
+  # ============================================================
+  # SDK 배포 (Main Server)
+  # ============================================================
+  deploy-sdk:
+    needs: setup
+    if: needs.setup.outputs.service == 'all' || needs.setup.outputs.service == 'sdk'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy SDK
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ needs.setup.outputs.main_host }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/sdk:dev
+            docker stop tcurity-sdk 2>/dev/null || true
+            docker rm tcurity-sdk 2>/dev/null || true
+            
+            docker run -d \
+              --name tcurity-sdk \
+              --restart unless-stopped \
+              -p 3000:80 \
+              ${{ env.REGISTRY }}/${{ env.ORG }}/sdk:dev
+            
+            docker image prune -f
+            echo "✅ SDK deployed"
+
+  # ============================================================
+  # Demo Site 배포 (Main Server)
+  # ============================================================
+  deploy-demo:
+    needs: setup
+    if: needs.setup.outputs.service == 'all' || needs.setup.outputs.service == 'demo'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Demo Site
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ needs.setup.outputs.main_host }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/demo:dev
+            docker stop tcurity-demo 2>/dev/null || true
+            docker rm tcurity-demo 2>/dev/null || true
+            
+            docker run -d \
+              --name tcurity-demo \
+              --restart unless-stopped \
+              -p 5173:80 \
+              ${{ env.REGISTRY }}/${{ env.ORG }}/demo:dev
+            
+            docker image prune -f
+            echo "✅ Demo Site deployed"
+
+  # ============================================================
+  # Nginx 배포 (Main Server) - HTTPS 적용
+  # ============================================================
+  deploy-nginx:
     needs: setup
     if: needs.setup.outputs.service == 'all' || needs.setup.outputs.service == 'nginx'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy Nginx
+      - name: Deploy Nginx with HTTPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ needs.setup.outputs.main_host }}
@@ -105,3 +330,27 @@ deploy-nginx:
               nginx:1.25-alpine
             
             echo "✅ Nginx deployed with HTTPS"
+
+  # ============================================================
+  # 배포 결과 요약
+  # ============================================================
+  summary:
+    needs: [setup, deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-nginx]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ needs.deploy-backend.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AI | ${{ needs.deploy-ai.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SDK | ${{ needs.deploy-sdk.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Demo | ${{ needs.deploy-demo.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Nginx | ${{ needs.deploy-nginx.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment || 'aws-test' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Main Server:** ${{ needs.setup.outputs.main_host }}" >> $GITHUB_STEP_SUMMARY
+          echo "**GPU Server:** ${{ needs.setup.outputs.gpu_host }}" >> $GITHUB_STEP_SUMMARY
