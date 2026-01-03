@@ -55,8 +55,8 @@ jobs:
             echo "gpu_private=10.0.83.48" >> $GITHUB_OUTPUT
           else
             # AWS 테스트 (기본값)
-            echo "main_host=43.201.104.130" >> $GITHUB_OUTPUT
-            echo "gpu_host=43.203.216.206" >> $GITHUB_OUTPUT
+            echo "main_host=3.36.60.13" >> $GITHUB_OUTPUT
+            echo "gpu_host=54.180.253.215" >> $GITHUB_OUTPUT
             echo "gpu_private=10.0.83.190" >> $GITHUB_OUTPUT
           fi
           
