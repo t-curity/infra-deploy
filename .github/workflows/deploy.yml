@@ -14,6 +14,7 @@ on:
           - ai
           - sdk
           - demo
+          - landing
           - nginx
       environment:
         description: 'Target environment'
@@ -25,7 +26,7 @@ on:
           - kakao-prod
 
   repository_dispatch:
-    types: [deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-all]
+    types: [deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-landing, deploy-all]
 
 env:
   REGISTRY: ghcr.io
@@ -69,6 +70,7 @@ jobs:
               deploy-ai) echo "service=ai" >> $GITHUB_OUTPUT ;;
               deploy-sdk) echo "service=sdk" >> $GITHUB_OUTPUT ;;
               deploy-demo) echo "service=demo" >> $GITHUB_OUTPUT ;;
+              deploy-landing) echo "service=landing" >> $GITHUB_OUTPUT ;;
               *) echo "service=all" >> $GITHUB_OUTPUT ;;
             esac
           else
@@ -231,6 +233,37 @@ jobs:
             echo "✅ Demo Site deployed"
 
   # ============================================================
+  # Landing Page 배포 (Main Server)
+  # ============================================================
+  deploy-landing:
+    needs: setup
+    if: needs.setup.outputs.service == 'all' || needs.setup.outputs.service == 'landing'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Landing Page
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ needs.setup.outputs.main_host }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/landing:dev
+            docker stop tcurity-landing 2>/dev/null || true
+            docker rm tcurity-landing 2>/dev/null || true
+            
+            docker run -d \
+              --name tcurity-landing \
+              --restart unless-stopped \
+              -p 4000:80 \
+              ${{ env.REGISTRY }}/${{ env.ORG }}/landing:dev
+            
+            docker image prune -f
+            echo "✅ Landing Page deployed"
+
+  # ============================================================
   # Nginx 배포 (Main Server) - HTTPS 적용
   # ============================================================
   deploy-nginx:
@@ -337,8 +370,21 @@ jobs:
                     error_page 404 = /index.html;
                 }
 
-                location / {
+                # 데모 사이트 (/demo/)
+                location /demo/ {
+                    rewrite ^/demo/(.*)$ /$1 break;
                     proxy_pass http://172.17.0.1:5173;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_intercept_errors on;
+                    error_page 404 = /index.html;
+                }
+
+                # 메인: 랜딩 페이지
+                location / {
+                    proxy_pass http://172.17.0.1:4000;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "upgrade";
@@ -375,7 +421,7 @@ jobs:
   # 배포 결과 요약
   # ============================================================
   summary:
-    needs: [setup, deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-nginx]
+    needs: [setup, deploy-backend, deploy-ai, deploy-sdk, deploy-demo, deploy-landing, deploy-nginx]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -389,6 +435,7 @@ jobs:
           echo "| AI | ${{ needs.deploy-ai.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| SDK | ${{ needs.deploy-sdk.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Demo | ${{ needs.deploy-demo.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Landing | ${{ needs.deploy-landing.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Nginx | ${{ needs.deploy-nginx.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Environment:** ${{ github.event.inputs.environment || 'aws-test' }}" >> $GITHUB_STEP_SUMMARY
