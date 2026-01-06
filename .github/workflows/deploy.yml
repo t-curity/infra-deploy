@@ -147,7 +147,7 @@ jobs:
               -v /home/ubuntu/tcurity-ai/models:/models:ro \
               -v /home/ubuntu/tcurity-ai/data:/data:ro \
               -v /home/ubuntu/tcurity-ai/data/drag_trainset:/data/drag_trainset:rw \
-              -v /home/ubuntu/tcurity-ai/data/phase_b_trainset:/data/phase_b_trainset:rw \
+              -v /home/ubuntu/tcurity-ai/data/phase_b:/data/phase_bt:rw \
               -e MODEL_A_DIR=/models/phase_a \
               -e MODEL_B_DIR=/models/phase_b \
               -e PROJECT_ROOT=/app \
@@ -160,7 +160,7 @@ jobs:
               -e PHASE_A_DATA_DIR=/data/drag_trainset \
               -e PHASE_B_SAVE_ENABLED=1 \
               -e PHASE_B_SAVE_RATIO=1.0 \
-              -e PHASE_B_DATA_DIR=/data/phase_b_trainset \
+              -e PHASE_B_DATA_DIR=/data/phase_b \
               ${{ env.REGISTRY }}/${{ env.ORG }}/ai:develop
             
             docker image prune -f
