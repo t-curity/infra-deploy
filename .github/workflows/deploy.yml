@@ -147,7 +147,7 @@ jobs:
               -v /home/ubuntu/tcurity-ai/models:/models:ro \
               -v /home/ubuntu/tcurity-ai/data:/data:ro \
               -v /home/ubuntu/tcurity-ai/data/drag_trainset:/data/drag_trainset:rw \
-              -v /home/ubuntu/tcurity-ai/data/phase_b:/data/phase_bt:rw \
+              -v /home/ubuntu/tcurity-ai/data/phase_b:/data/phase_b:rw \
               -e MODEL_A_DIR=/models/phase_a \
               -e MODEL_B_DIR=/models/phase_b \
               -e PROJECT_ROOT=/app \
