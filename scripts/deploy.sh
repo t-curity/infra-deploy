@@ -43,18 +43,28 @@ deploy_ai() {
 docker pull ${REGISTRY}/${ORG}/ai:develop
 docker stop tcurity-ai 2>/dev/null || true
 docker rm tcurity-ai 2>/dev/null || true
+
+# ✅ 저장 디렉토리 호스트에 준비
+mkdir -p /home/ubuntu/tcurity-ai/data/drag_trainset
+
 docker run -d --name tcurity-ai --restart unless-stopped \
     --gpus all -p 9000:9000 \
     -v /home/ubuntu/tcurity-ai/models:/app/models:ro \
     -v /home/ubuntu/tcurity-ai/data:/app/data:ro \
+    -v /home/ubuntu/tcurity-ai/data/drag_trainset:/data/drag_trainset \
     -e MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking \
     -e IMAGE_DATA_ROOT=/app/data/images \
     -e MODEL_OUTPUT_ROOT=/app/models \
     -e PHASE_B_PROBLEM_IMAGE_ROOT=/app/data/processed_images \
+    -e PHASE_A_SAVE_ENABLED=1 \
+    -e PHASE_A_SAVE_RATIO=1.0 \
+    -e PHASE_A_DATA_DIR=/data/drag_trainset \
     ${REGISTRY}/${ORG}/ai:develop
+
 docker image prune -f
 EOF
 }
+
 
 deploy_sdk() {
     log "Deploying SDK..."
