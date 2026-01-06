@@ -102,6 +102,8 @@ jobs:
               --restart unless-stopped \
               -p 8000:8000 \
               -e AI_SERVER_URL=http://${{ needs.setup.outputs.gpu_private }}:9000 \
+              -e TCURITY_API_URL=http://localhost:8000
+              -e CLIENT_SECRET_KEY=demo-secret-key-123
               ${{ env.REGISTRY }}/${{ env.ORG }}/backend:develop
             
             docker image prune -f
