@@ -250,38 +250,67 @@ jobs:
             # Nginx 설정 디렉토리 생성
             mkdir -p ~/nginx
             
-            # Nginx 설정 파일 생성 (HTTPS 포함)
+            # Nginx 설정 파일 생성 (HTTPS + CORS + /v1/ 경로 포함)
             cat > ~/nginx/default.conf << 'NGINXCONF'
             server {
                 listen 80;
                 server_name tcurity.com www.tcurity.com;
                 
-                # Let's Encrypt 인증용
                 location /.well-known/acme-challenge/ {
                     root /var/www/certbot;
                 }
                 
-                # HTTP를 HTTPS로 리다이렉트
                 location / {
                     return 301 https://$host$request_uri;
                 }
             }
 
             server {
-                listen 443 ssl http2;
+                listen 443 ssl;
+                http2 on;
                 server_name tcurity.com www.tcurity.com;
 
-                # SSL 인증서
                 ssl_certificate /etc/letsencrypt/live/tcurity.com/fullchain.pem;
                 ssl_certificate_key /etc/letsencrypt/live/tcurity.com/privkey.pem;
                 
-                # SSL 설정
                 ssl_protocols TLSv1.2 TLSv1.3;
                 ssl_prefer_server_ciphers on;
                 ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
 
+                # API 경로 (/api/)
                 location /api/ {
-                    proxy_pass http://127.0.0.1:8000;
+                    add_header 'Access-Control-Allow-Origin' '*' always;
+                    add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+                    add_header 'Access-Control-Allow-Headers' 'Content-Type, X-Client-Id, X-Session-Id, X-Client-Secret-Key' always;
+
+                    if ($request_method = 'OPTIONS') {
+                        add_header 'Access-Control-Allow-Origin' '*';
+                        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+                        add_header 'Access-Control-Allow-Headers' 'Content-Type, X-Client-Id, X-Session-Id, X-Client-Secret-Key';
+                        return 204;
+                    }
+
+                    proxy_pass http://172.17.0.1:8000;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+
+                # SDK용 API 경로 (/v1/)
+                location /v1/ {
+                    add_header 'Access-Control-Allow-Origin' '*' always;
+                    add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+                    add_header 'Access-Control-Allow-Headers' 'Content-Type, X-Client-Id, X-Session-Id, X-Client-Secret-Key' always;
+
+                    if ($request_method = 'OPTIONS') {
+                        add_header 'Access-Control-Allow-Origin' '*';
+                        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+                        add_header 'Access-Control-Allow-Headers' 'Content-Type, X-Client-Id, X-Session-Id, X-Client-Secret-Key';
+                        return 204;
+                    }
+
+                    proxy_pass http://172.17.0.1:8000;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -289,7 +318,7 @@ jobs:
                 }
 
                 location = /sdk.js {
-                    proxy_pass http://127.0.0.1:3000/sdk.js;
+                    proxy_pass http://172.17.0.1:3000/sdk.js;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -298,7 +327,7 @@ jobs:
 
                 location /ticket-site-demo/ {
                     rewrite ^/ticket-site-demo/(.*)$ /$1 break;
-                    proxy_pass http://127.0.0.1:5173;
+                    proxy_pass http://172.17.0.1:5173;
                     proxy_set_header Host $host;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -308,7 +337,7 @@ jobs:
                 }
 
                 location / {
-                    proxy_pass http://127.0.0.1:5173;
+                    proxy_pass http://172.17.0.1:5173;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade $http_upgrade;
                     proxy_set_header Connection "upgrade";
