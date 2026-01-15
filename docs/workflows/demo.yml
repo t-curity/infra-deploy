@@ -1,59 +1,74 @@
-# ============================================================
-# ticket-site-demo 레포의 .github/workflows/ 에 복사
-# ============================================================
-name: Build & Deploy Demo
+name: Deploy T.curity Ticket Demo to GitHub Pages
 
 on:
   push:
-    branches: ["dev"]
-  pull_request:
-    branches: ["dev"]
+    branches:
+      - dev
+  workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
+  pages: write
+  id-token: write
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/t-curity/demo
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+# env:
+  # 필요 시 여기서 공통 VITE_* 환경변수 선언 가능 (권장 X, secrets 선호)
+  # VITE_API_BASE_URL: https://example.com
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+      VITE_USE_FAKE_SERVER: ${{ secrets.VITE_USE_FAKE_SERVER }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: docker/metadata-action@v5
-        id: meta
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          images: ${{ env.IMAGE }}
-          tags: |
-            type=sha,prefix=sha-
-            type=ref,event=branch
+          node-version: "20"   # Node 버전 추천: 20 LTS
+          cache: "npm"
 
-      - uses: docker/build-push-action@v6
+      - name: Install dependencies
+        run: npm ci
+
+      # VITE_* 환경변수 세팅 (필요할 때만)
+      # GitHub Secrets에 등록한 값을 가져와서 Vite 빌드에 사용
+      - name: Set env for Vite
+        run: |
+          echo "VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}" >> $GITHUB_ENV
+          echo "VITE_SOME_KEY=${{ secrets.VITE_SOME_KEY }}" >> $GITHUB_ENV
+        shell: bash
+        if: env.VITE_API_BASE_URL != '' || env.VITE_USE_FAKE_SERVER != ''
+
+      - name: Build
+        run: npm run build
+
+      # Vite SPA용 404.html 생성 (index.html 복사)
+      - name: Copy index.html to 404.html for SPA routing
+        run: cp dist/index.html dist/404.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          context: .
-          file: Dockerfile
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          path: dist
 
   deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     needs: build
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+
     steps:
-      - uses: peter-evans/repository-dispatch@v2
-        with:
-          token: ${{ secrets.GHCR_TOKEN }}
-          repository: t-curity/infra-deploy
-          event-type: deploy-demo
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
