@@ -96,7 +96,7 @@ jobs:
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # 데이터 디렉토리 생성
-            mkdir -p /home/ubuntu/tcurity-backend/data
+            mkdir -p /home/ubuntu/tcurity-project/tcurity-backend/data
             
             docker pull ${{ env.REGISTRY }}/${{ env.ORG }}/backend:develop
             docker stop tcurity-backend 2>/dev/null || true
@@ -106,7 +106,7 @@ jobs:
               --name tcurity-backend \
               --restart unless-stopped \
               -p 8000:8000 \
-              -v /home/ubuntu/tcurity-backend/data:/app/data \
+              -v /home/ubuntu/tcurity-project/tcurity-backend/data:/app/data \
               -e AI_SERVER_URL=http://${{ needs.setup.outputs.gpu_private }}:9000 \
               -e TCURITY_API_URL=http://localhost:8000 \
               -e CLIENT_SECRET_KEY=demo-secret-key-123 \
