@@ -305,6 +305,9 @@ jobs:
             # Nginx 설정 디렉토리 생성
             mkdir -p ~/nginx
             
+            # Certbot webroot 디렉토리 생성
+            sudo mkdir -p /var/www/certbot
+            
             # htpasswd 파일 생성 (없으면)
             if [ ! -f ~/nginx/.htpasswd ]; then
               # apache2-utils 설치 (htpasswd 명령어용)
@@ -446,7 +449,7 @@ jobs:
             docker stop tcurity-nginx 2>/dev/null || true
             docker rm tcurity-nginx 2>/dev/null || true
             
-            # Nginx 실행 (SSL 인증서 + htpasswd 볼륨 마운트)
+            # Nginx 실행 (SSL 인증서 + htpasswd + certbot 볼륨 마운트)
             docker run -d \
               --name tcurity-nginx \
               --restart unless-stopped \
@@ -454,9 +457,10 @@ jobs:
               -v ~/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
               -v ~/nginx/.htpasswd:/etc/nginx/.htpasswd:ro \
               -v /etc/letsencrypt:/etc/letsencrypt:ro \
+              -v /var/www/certbot:/var/www/certbot:ro \
               nginx:1.25-alpine
             
-            echo "✅ Nginx deployed with HTTPS + MLflow auth"
+            echo "✅ Nginx deployed with HTTPS + MLflow auth + Certbot support"
 
   # ============================================================
   # 배포 결과 요약
