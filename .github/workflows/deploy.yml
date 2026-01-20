@@ -124,7 +124,7 @@ jobs:
       - name: Deploy AI Server
         uses: appleboy/ssh-action@v1.0.3
         env:
-          DEPLOY_ENV: ${{ github.event.inputs.environment || 'aws-test' }}
+          DEPLOY_ENV: ${{ github.event.inputs.environment || 'kakao-prod' }}
         with:
           host: ${{ needs.setup.outputs.gpu_host }}
           username: ${{ secrets.SSH_USER }}
@@ -141,8 +141,10 @@ jobs:
             # GPU 옵션: 카카오는 GPU 사용, AWS는 CPU만
             if [ "$DEPLOY_ENV" = "kakao-prod" ]; then
               GPU_OPT="--gpus all"
+              MLFLOW_URI="http://61.109.238.4:5000"
             else
               GPU_OPT=""
+              MLFLOW_URI="http://54.180.253.215:5000"
             fi
             
             docker run -d \
@@ -154,23 +156,41 @@ jobs:
               -v /home/ubuntu/tcurity-ai/data:/data:ro \
               -v /home/ubuntu/tcurity-ai/data/drag_trainset:/data/drag_trainset:rw \
               -v /home/ubuntu/tcurity-ai/data/phase_b:/data/phase_b:rw \
-              -e MODEL_A_DIR=/models/phase_a \
-              -e MODEL_B_DIR=/models/phase_b \
               -e PROJECT_ROOT=/app \
+              \
+              `# ===== MLflow 설정 =====` \
+              -e MLFLOW_TRACKING_URI=$MLFLOW_URI \
               -e MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking \
-              -e IMAGE_DATA_ROOT=/data/images \
-              -e MODEL_OUTPUT_ROOT=/app/models \
-              -e PHASE_B_PROBLEM_IMAGE_ROOT=/data/processed_images \
+              \
+              `# ===== Phase A: Isolation Forest =====` \
+              -e PHASE_A_EXPERIMENT_NAME=phase-a-isolation-forest \
               -e PHASE_A_SAVE_ENABLED=1 \
               -e PHASE_A_SAVE_RATIO=1.0 \
               -e PHASE_A_DATA_DIR=/data/drag_trainset \
+              -e PHASE_A_MODEL_DIR=/models/phase_a \
+              -e PHASE_A_DATASET_VERSION=v001 \
+              -e SAVE_DIAGNOSTICS=0 \
+              -e KEEP_BACKUPS=2 \
+              \
+              `# ===== Phase B: Behavior (Random Forest) =====` \
+              -e PHASE_B_BEHAVIOR_EXPERIMENT_NAME=phase-b-random-forest \
+              -e PHASE_B_BEHAVIOR_DATASET_VERSION=v001 \
+              \
+              `# ===== Phase B: Image (EfficientNet) =====` \
+              -e PHASE_B_IMAGE_EXPERIMENT_NAME=phase-b-efficientnet \
               -e PHASE_B_SAVE_ENABLED=1 \
               -e PHASE_B_SAVE_RATIO=1.0 \
               -e PHASE_B_DATA_DIR=/data/phase_b \
+              -e IMAGE_DATA_ROOT=/data/images \
+              -e MODEL_OUTPUT_ROOT=/app/models \
+              -e PHASE_B_PROBLEM_IMAGE_ROOT=/data/processed_images \
+              -e MODEL_A_DIR=/models/phase_a \
+              -e MODEL_B_DIR=/models/phase_b \
+              \
               ${{ env.REGISTRY }}/${{ env.ORG }}/ai:develop
             
             docker image prune -f
-            echo "✅ AI Server deployed"
+            echo "✅ AI Server deployed with MLflow + Phase A/B configs"
 
   # ============================================================
   # SDK 배포 (Main Server)
@@ -409,7 +429,7 @@ jobs:
                     auth_basic_user_file /etc/nginx/.htpasswd;
                     
                     proxy_pass http://10.0.83.48:5000/;
-                    proxy_set_header Host $host;
+                    proxy_set_header Host 10.0.83.48:5000;
                     proxy_set_header X-Real-IP $remote_addr;
                     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto $scheme;
