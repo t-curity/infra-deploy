@@ -115,26 +115,33 @@ jobs:
             # GHCR 로그인
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            # 환경변수 설정
-            cat > .env << 'EOF'
-            AI_SERVER_URL=http://${{ needs.setup.outputs.gpu_private }}:9000
-            CLIENT_SECRET_KEY=${{ secrets.CLIENT_SECRET_KEY }}
-            GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-            EOF
-            
             # 서비스별 배포
             SERVICE="${{ needs.setup.outputs.service }}"
             
             if [ "$SERVICE" = "all" ]; then
+              # 기존 컨테이너 정리 (compose 외부에서 실행된 것들)
+              docker stop tcurity-backend tcurity-sdk tcurity-demo tcurity-landing tcurity-nginx node-exporter prometheus grafana 2>/dev/null || true
+              docker rm tcurity-backend tcurity-sdk tcurity-demo tcurity-landing tcurity-nginx node-exporter prometheus grafana 2>/dev/null || true
+              
               # 전체 배포
+              docker compose -f docker-compose.main.yml down --remove-orphans || true
               docker compose -f docker-compose.main.yml pull
               docker compose -f docker-compose.main.yml up -d
+              
             elif [ "$SERVICE" = "monitoring" ]; then
+              # 기존 모니터링 컨테이너 정리
+              docker stop node-exporter prometheus grafana 2>/dev/null || true
+              docker rm node-exporter prometheus grafana 2>/dev/null || true
+              
               # 모니터링만 배포
               docker compose -f docker-compose.main.yml pull node-exporter prometheus grafana
               docker compose -f docker-compose.main.yml up -d node-exporter prometheus grafana
+              
             else
-              # 특정 서비스만 배포
+              # 특정 서비스만 정리 및 배포
+              docker stop tcurity-$SERVICE 2>/dev/null || true
+              docker rm tcurity-$SERVICE 2>/dev/null || true
+              
               docker compose -f docker-compose.main.yml pull $SERVICE
               docker compose -f docker-compose.main.yml up -d $SERVICE
             fi
@@ -181,23 +188,16 @@ jobs:
             # GHCR 로그인
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            # 환경변수 설정
-            if [ "$DEPLOY_ENV" = "kakao-prod" ]; then
-              MLFLOW_URI="http://61.109.238.4:5000"
-            else
-              MLFLOW_URI="http://54.180.253.215:5000"
-            fi
+            # 기존 컨테이너 정리
+            docker stop tcurity-ai node-exporter mlflow 2>/dev/null || true
+            docker rm tcurity-ai node-exporter mlflow 2>/dev/null || true
             
-            cat > .env << EOF
-            MLFLOW_TRACKING_URI=$MLFLOW_URI
-            EOF
+            # compose down
+            docker compose -f docker-compose.gpu.yml down --remove-orphans || true
             
             # AI 서비스 배포
-            docker compose -f docker-compose.gpu.yml pull ai
-            docker compose -f docker-compose.gpu.yml up -d ai
-            
-            # node-exporter도 함께 배포 (모니터링)
-            docker compose -f docker-compose.gpu.yml up -d node-exporter
+            docker compose -f docker-compose.gpu.yml pull
+            docker compose -f docker-compose.gpu.yml up -d
             
             # 미사용 이미지 정리
             docker image prune -f
