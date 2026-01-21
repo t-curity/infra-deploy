@@ -6,7 +6,9 @@
 #   docker compose -f docker-compose.gpu.yml pull
 #   docker compose -f docker-compose.gpu.yml up -d
 #   docker compose -f docker-compose.gpu.yml down
-#   docker compose -f docker-compose.gpu.yml logs -f [service]
+# ============================================================
+# 참고: MLflow는 systemd 서비스로 별도 관리
+#   sudo systemctl status mlflow
 # ============================================================
 
 services:
@@ -67,27 +69,6 @@ services:
       - tcurity-ai-net
 
   # ==========================================================
-  # MLflow 서버
-  # ==========================================================
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.17.2
-    container_name: mlflow
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
-    volumes:
-      - /home/ubuntu/tcurity-ai/mlflow.db:/mlflow/mlflow.db
-      - /home/ubuntu/tcurity-ai/mlartifacts:/mlflow/mlartifacts
-    command: >
-      mlflow server
-      --backend-store-uri sqlite:///mlflow/mlflow.db
-      --default-artifact-root /mlflow/mlartifacts
-      --host 0.0.0.0
-      --port 5000
-    networks:
-      - tcurity-ai-net
-
-  # ==========================================================
   # 모니터링 (node-exporter)
   # ==========================================================
   node-exporter:
@@ -107,9 +88,3 @@ services:
 networks:
   tcurity-ai-net:
     driver: bridge
-
-# ==========================================================
-# 볼륨 (선택적)
-# ==========================================================
-volumes:
-  mlflow-data:
