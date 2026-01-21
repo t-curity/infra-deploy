@@ -1,54 +1,137 @@
 # ============================================================
-# T-curity Main Server - Docker Compose
+# T:CURITY Main Server - Docker Compose
 # ============================================================
-# 사용법: docker compose -f docker-compose.main.yml up -d
+# 사용법:
+#   cd /home/ubuntu/infra-deploy/docker
+#   docker compose -f docker-compose.main.yml pull
+#   docker compose -f docker-compose.main.yml up -d
+#   docker compose -f docker-compose.main.yml down
+#   docker compose -f docker-compose.main.yml logs -f [service]
 # ============================================================
 
 services:
-  nginx:
-    image: nginx:alpine
-    container_name: tcurity-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
-
-  certbot:
-    image: certbot/certbot
-    container_name: tcurity-certbot
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+  # ==========================================================
+  # 애플리케이션 서비스
+  # ==========================================================
   backend:
     image: ghcr.io/t-curity/backend:develop
     container_name: tcurity-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - /home/ubuntu/tcurity-project/tcurity-backend/data:/app/data
     environment:
-      # GPU 서버 Private IP (AWS: 10.0.83.190 / 카카오: 10.0.83.48)
-      - AI_SERVER_URL=http://10.0.83.48:9000
+      - AI_SERVER_URL=${AI_SERVER_URL:-http://10.0.83.48:9000}
+      - TCURITY_API_URL=http://localhost:8000
+      - CLIENT_SECRET_KEY=${CLIENT_SECRET_KEY:-demo-secret-key-123}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - tcurity-net
 
   sdk:
     image: ghcr.io/t-curity/sdk:dev
     container_name: tcurity-sdk
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:80"
+    networks:
+      - tcurity-net
 
   demo:
     image: ghcr.io/t-curity/demo:dev
     container_name: tcurity-demo
     restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "5173:80"
+    networks:
+      - tcurity-net
 
+  landing:
+    image: ghcr.io/t-curity/landing:dev
+    container_name: tcurity-landing
+    restart: unless-stopped
+    ports:
+      - "4000:80"
+    networks:
+      - tcurity-net
+
+  # ==========================================================
+  # 리버스 프록시 (Nginx)
+  # ==========================================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: tcurity-nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /home/ubuntu/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - sdk
+      - demo
+      - landing
+
+  # ==========================================================
+  # 모니터링 스택
+  # ==========================================================
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SERVER_ROOT_URL=https://tcurity.com/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    networks:
+      - tcurity-net
+
+# ==========================================================
+# 네트워크
+# ==========================================================
 networks:
-  default:
-    name: tcurity-network
+  tcurity-net:
+    driver: bridge
+
+# ==========================================================
+# 볼륨
+# ==========================================================
+volumes:
+  prometheus-data:
+  grafana-data:

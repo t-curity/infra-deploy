@@ -1,28 +1,61 @@
 # ============================================================
-# T-curity GPU Server - Docker Compose
+# T:CURITY GPU Server - Docker Compose
 # ============================================================
-# 사용법: docker compose -f docker-compose.gpu.yml up -d
+# 사용법:
+#   cd /home/ubuntu/infra-deploy/docker
+#   docker compose -f docker-compose.gpu.yml pull
+#   docker compose -f docker-compose.gpu.yml up -d
+#   docker compose -f docker-compose.gpu.yml down
+#   docker compose -f docker-compose.gpu.yml logs -f [service]
 # ============================================================
 
 services:
+  # ==========================================================
+  # AI 서버
+  # ==========================================================
   ai:
     image: ghcr.io/t-curity/ai:develop
     container_name: tcurity-ai
     restart: unless-stopped
     ports:
       - "9000:9000"
+    volumes:
+      - /home/ubuntu/tcurity-ai/models:/models:ro
+      - /home/ubuntu/tcurity-ai/data:/data:ro
+      - /home/ubuntu/tcurity-ai/data/drag_trainset:/data/drag_trainset:rw
+      - /home/ubuntu/tcurity-ai/data/phase_b:/data/phase_b:rw
     environment:
+      # 기본 설정
+      - PROJECT_ROOT=/app
+      
+      # MLflow 설정
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-http://61.109.238.4:5000}
       - MLFLOW_EXPERIMENT_NAME=captcha-effnet-tracking
-      - IMAGE_DATA_ROOT=/app/data/images
-      - MODEL_OUTPUT_ROOT=/app/models
+      
+      # Phase A: Isolation Forest
+      - PHASE_A_EXPERIMENT_NAME=phase-a-isolation-forest
       - PHASE_A_SAVE_ENABLED=1
       - PHASE_A_SAVE_RATIO=1.0
       - PHASE_A_DATA_DIR=/data/drag_trainset
-      - PHASE_B_PROBLEM_IMAGE_ROOT=/app/data/processed_images
-    volumes:
-      - /home/ubuntu/tcurity-ai/models:/app/models:ro
-      - /home/ubuntu/tcurity-ai/data:/app/data:ro
-      - /home/ubuntu/tcurity-ai/data/drag_trainset:/data/drag_trainset
+      - PHASE_A_MODEL_DIR=/models/phase_a
+      - PHASE_A_DATASET_VERSION=v001
+      - SAVE_DIAGNOSTICS=0
+      - KEEP_BACKUPS=2
+      
+      # Phase B: Behavior (Random Forest)
+      - PHASE_B_BEHAVIOR_EXPERIMENT_NAME=phase-b-random-forest
+      - PHASE_B_BEHAVIOR_DATASET_VERSION=v001
+      
+      # Phase B: Image (EfficientNet)
+      - PHASE_B_IMAGE_EXPERIMENT_NAME=phase-b-efficientnet
+      - PHASE_B_SAVE_ENABLED=1
+      - PHASE_B_SAVE_RATIO=1.0
+      - PHASE_B_DATA_DIR=/data/phase_b
+      - IMAGE_DATA_ROOT=/data/images
+      - MODEL_OUTPUT_ROOT=/app/models
+      - PHASE_B_PROBLEM_IMAGE_ROOT=/data/processed_images
+      - MODEL_A_DIR=/models/phase_a
+      - MODEL_B_DIR=/models/phase_b
     deploy:
       resources:
         reservations:
@@ -30,7 +63,53 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    networks:
+      - tcurity-ai-net
 
+  # ==========================================================
+  # MLflow 서버
+  # ==========================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.2
+    container_name: mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - /home/ubuntu/tcurity-ai/mlflow.db:/mlflow/mlflow.db
+      - /home/ubuntu/tcurity-ai/mlartifacts:/mlflow/mlartifacts
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/mlartifacts
+      --host 0.0.0.0
+      --port 5000
+    networks:
+      - tcurity-ai-net
+
+  # ==========================================================
+  # 모니터링 (node-exporter)
+  # ==========================================================
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    command:
+      - '--path.rootfs=/host'
+
+# ==========================================================
+# 네트워크
+# ==========================================================
 networks:
-  default:
-    name: tcurity-ai-network
+  tcurity-ai-net:
+    driver: bridge
+
+# ==========================================================
+# 볼륨 (선택적)
+# ==========================================================
+volumes:
+  mlflow-data:
